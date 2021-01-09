@@ -1,0 +1,40 @@
+.operation{
+    height:500px;
+    width:300px;
+    position: absolute;
+    right:0;
+    top:27vw;
+    border:1px solid #000;
+}
+#myPalettep{
+    height:300px;
+    width:19%;
+    position: absolute;
+    right:0;
+    top:60px;
+}
+.activeul{
+    height:36px;
+    width:180px;
+    background:rgba(63,155,253,0.2);
+    position: absolute;
+    left:20px;
+    top:15px;
+    z-index:666;
+    color:#fff;
+    border-radius:2px;
+    border:1px solid #00B3FF;
+    outline:none;
+}
+option{
+    appearance:none;
+    -moz-appearance:none;
+    -webkit-appearance:none;
+    height:36px;
+    width:180px;
+    background:rgba(63,155,253,0.2);
+    border:1px solid rgba(0,179,255,1);
+    color:#fff;
+    border-radius:2px;
+    outline:none;
+}

@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Draggable Link</title>
+<link href="bootstrap-3.3.7-dist/css/bootstrap.min.css" rel="stylesheet">
+<script src="jQuery.js"></script>
+<script src="bootstrap-3.3.7-dist/js/bootstrap.min.js"></script>
+
+<meta name="description" content="Drag a link to reconnect it. Nodes have custom Adornments for selection, resizing, and reshaping." />
+
+<!-- Copyright 1998-2017 by Northwoods Software Corporation. -->
+
+<meta charset="UTF-8">
+
+<link rel="stylesheet" href="rua.css">
+
+<script src="go.js"></script>
+
+<!-- <script src="http://code.jquery.com/jquery-2.1.1.min.js"></script> -->
+
+
+
+</head>
+
+<body onload="init()">
+
+    <!-- <select class="activeul" id="activeul" value="选项1">
+      <option>选项1</option>
+      <option>选项2</option>
+      <option>选项3</option>
+    </select> -->
+
+
+<script>
+  // $("#activebtn").click(()=>{
+  //   $("#activebtn").css({
+  //     "color":"#fff"
+  //   })
+  // })
+  // $("#activeul option").click(function(){
+  //   console.log($(this).text())
+  // })
+</script>
+
+
+
+<p id="sample" >
+
+ <p style="width:100%; white-space:nowrap;">
+
+ <span style="display: inline-block; vertical-align: top; width:105px">
+
+  <p id="myPalettep" style="border: solid 1px black; height: 25vw;position:absolute;top:0;background:#000;"></p>
+
+ </span>
+
+ 
+
+ <span style="display: inline-block; vertical-align: top; width:80%;position:absolute;top:0;">
+
+  <p id="myDiagramp" style="border: solid 1px black; height:44.7vw;background:#000;"></p>
+
+ </span>
+
+ </p>
+
+
+ <!-- <p class="operation">
+
+  <button id="click1">选项1</button>
+  <button id="click2">选项2</button>
+
+</p> -->
+
+
+
+ <p>
+
+ <p >
+
+  <button id="SaveButton" onclick="save()">Save</button>
+
+  <button onclick="load()">Load</button>
+
+ </p>
+
+ <textarea id="mySavedModel" style="width:100%;height:15.6vw; display:none;">
+
+{ "class": "go.GraphLinksModel",
+
+ "linkFromPortIdProperty": "fromPort",
+
+ "linkToPortIdProperty": "toPort",
+
+ "nodeDataArray": [
+    
+ ],
+
+ "linkDataArray": [
+
+ ]}
+
+ </textarea>
+
+ </p>
+
+</p>
+</body>
+<script id="code">
+
+  function init() {
+ 
+  if (window.goSamples) goSamples(); // init for these samples -- you don't need to call this
+ 
+  var $ = go.GraphObject.make; // for conciseness in defining templates
+  
+ 
+  myDiagram =
+ 
+   $(go.Diagram, "myDiagramp", // must name or refer to the p HTML element
+ 
+   {
+ 
+   //  是否显示网格
+   //  grid: $(go.Panel, "Grid",
+ 
+   //    $(go.Shape, "LineH", { stroke: "lightgray", strokeWidth: 0.5 }),
+ 
+   //    $(go.Shape, "LineH", { stroke: "gray", strokeWidth: 0.5, interval: 10 }),
+ 
+   //    $(go.Shape, "LineV", { stroke: "lightgray", strokeWidth: 0.5 }),
+ 
+   //    $(go.Shape, "LineV", { stroke: "gray", strokeWidth: 0.5, interval: 10 })
+ 
+   //   ),
+ 
+   //只读
+   isReadOnly: true,
+   //初始化画布大小
+    scale:0.7,
+ 
+    allowDrop: true, // must be true to accept drops from the Palette
+ 
+    "draggingTool.dragsLink": true,
+ 
+    "draggingTool.isGridSnapEnabled": true,
+ 
+    "linkingTool.isUnconnectedLinkValid": true,
+ 
+    "linkingTool.portGravity": 20,
+ 
+    "relinkingTool.isUnconnectedLinkValid": true,
+ 
+    "relinkingTool.portGravity": 20,
+ 
+    "relinkingTool.fromHandleArchetype":
+ 
+    $(go.Shape, "Diamond", { segmentIndex: 0, cursor: "pointer", desiredSize: new go.Size(8, 8), fill: "tomato", stroke: "darkred" }),
+ 
+    "relinkingTool.toHandleArchetype":
+ 
+    $(go.Shape, "Diamond", { segmentIndex: -1, cursor: "pointer", desiredSize: new go.Size(8, 8), fill: "darkred", stroke: "tomato" }),
+ 
+    "linkReshapingTool.handleArchetype":
+ 
+    $(go.Shape, "Diamond", { desiredSize: new go.Size(7, 7), fill: "lightblue", stroke: "deepskyblue" }),
+ 
+    rotatingTool: $(TopRotatingTool), // defined below
+ 
+    "rotatingTool.snapAngleMultiple": 15,
+ 
+    "rotatingTool.snapAngleEpsilon": 15,
+ 
+    "undoManager.isEnabled": true
+ 
+   });
+ 
+ 
+ 
+ 
+  // when the document is modified, add a "*" to the title and enable the "Save" button
+ 
+  myDiagram.addDiagramListener("Modified", function(e) {
+ 
+   var button = document.getElementById("SaveButton");
+ 
+   if (button) button.disabled = !myDiagram.isModified;
+ 
+   var idx = document.title.indexOf("*");
+ 
+   if (myDiagram.isModified) {
+ 
+   if (idx < 0) document.title += "*";
+ 
+   } else {
+ 
+   if (idx >= 0) document.title = document.title.substr(0, idx);
+ 
+   }
+ 
+  });
+ 
+ 
+  
+ 
+  // Define a function for creating a "port" that is normally transparent.
+ 
+  // The "name" is used as the GraphObject.portId, the "spot" is used to control how links connect
+ 
+  // and where the port is positioned on the node, and the boolean "output" and "input" arguments
+ 
+  // control whether the user can draw links from or to the port.
+ 
+  function makePort(name, spot, output, input) {
+ 
+   // the port is basically just a small transparent square
+ 
+   return $(go.Shape, "Circle",
+ 
+     {
+ 
+      fill: null, // not seen, by default; set to a translucent gray by showSmallPorts, defined below
+ 
+      stroke: null,
+ 
+      desiredSize: new go.Size(7, 7),
+ 
+      alignment: spot, // align the port on the main Shape
+ 
+      alignmentFocus: spot, // just inside the Shape
+ 
+      portId: name, // declare this object to be a "port"
+ 
+      fromSpot: spot, toSpot: spot, // declare where links may connect at this port
+ 
+      fromLinkable: output, toLinkable: input, // declare whether the user may draw links to/from here
+ 
+      cursor: "pointer" // show a different cursor to indicate potential link point
+ 
+     });
+ 
+  }
+ 
+  
+ 
+  var nodeSelectionAdornmentTemplate =
+ 
+   $(go.Adornment, "Auto",
+ 
+   $(go.Shape, { fill: null, stroke: "deepskyblue", strokeWidth: 1.5, strokeDashArray: [4, 2] }),
+ 
+   $(go.Placeholder)
+ 
+   );
+ 
+  
+ 
+  var nodeResizeAdornmentTemplate =
+ 
+   $(go.Adornment, "Spot",
+ 
+   { locationSpot: go.Spot.Right },
+ 
+   $(go.Placeholder),
+ 
+   $(go.Shape, { alignment: go.Spot.TopLeft, cursor: "nw-resize", desiredSize: new go.Size(6, 6), fill: "lightblue", stroke: "deepskyblue" }),
+ 
+   $(go.Shape, { alignment: go.Spot.Top, cursor: "n-resize", desiredSize: new go.Size(6, 6), fill: "lightblue", stroke: "deepskyblue" }),
+ 
+   $(go.Shape, { alignment: go.Spot.TopRight, cursor: "ne-resize", desiredSize: new go.Size(6, 6), fill: "lightblue", stroke: "deepskyblue" }),
+ 
+  
+ 
+   $(go.Shape, { alignment: go.Spot.Left, cursor: "w-resize", desiredSize: new go.Size(6, 6), fill: "lightblue", stroke: "deepskyblue" }),
+ 
+   $(go.Shape, { alignment: go.Spot.Right, cursor: "e-resize", desiredSize: new go.Size(6, 6), fill: "lightblue", stroke: "deepskyblue" }),
+ 
+  
+ 
+   $(go.Shape, { alignment: go.Spot.BottomLeft, cursor: "se-resize", desiredSize: new go.Size(6, 6), fill: "lightblue", stroke: "deepskyblue" }),
+ 
+   $(go.Shape, { alignment: go.Spot.Bottom, cursor: "s-resize", desiredSize: new go.Size(6, 6), fill: "lightblue", stroke: "deepskyblue" }),
+ 
+   $(go.Shape, { alignment: go.Spot.BottomRight, cursor: "sw-resize", desiredSize: new go.Size(6, 6), fill: "lightblue", stroke: "deepskyblue" })
+ 
+   );
+ 
+  
+ 
+  var nodeRotateAdornmentTemplate =
+ 
+   $(go.Adornment,
+ 
+   { locationSpot: go.Spot.Center, locationObjectName: "CIRCLE" },
+ 
+   $(go.Shape, "Circle", { name: "CIRCLE", cursor: "pointer", desiredSize: new go.Size(7, 7), fill: "lightblue", stroke: "deepskyblue" }),
+ 
+   $(go.Shape, { geometryString: "M3.5 7 L3.5 30", isGeometryPositioned: true, stroke: "deepskyblue", strokeWidth: 1.5, strokeDashArray: [4, 2] })
+ 
+   );
+ 
+  
+ 
+  myDiagram.nodeTemplate =
+ 
+   $(go.Node, "Spot",
+ 
+   { locationSpot: go.Spot.Center },
+ 
+   new go.Binding("location", "loc", go.Point.parse).makeTwoWay(go.Point.stringify),
+ 
+   { selectable: true, selectionAdornmentTemplate: nodeSelectionAdornmentTemplate },
+ 
+   { resizable: true, resizeObjectName: "PANEL", resizeAdornmentTemplate: nodeResizeAdornmentTemplate },
+ 
+   { rotatable: true, rotateAdornmentTemplate: nodeRotateAdornmentTemplate },
+ 
+   new go.Binding("angle").makeTwoWay(),
+ 
+   // the main object is a Panel that surrounds a TextBlock with a Shape
+ 
+   $(go.Picture,
+           // Pictures 应该指定宽高.
+           // 当没有图片时显示红色的背景
+           // 或者当图片为透明的时候也是.
+           { width: 50, height: 50, background: "transparent" },
+           // Picture.source参数值与模型数据中的"source"字段绑定
+           new go.Binding("source"),
+           new go.Binding("height"),
+           new go.Binding("width")),
+   $(go.Panel, "Auto",
+ 
+    { name: "PANEL" },
+ 
+    new go.Binding("desiredSize", "size", go.Size.parse).makeTwoWay(go.Size.stringify),
+ 
+    $(go.Shape, "Rectangle", // default figure
+ 
+    {
+ 
+     portId: "", // the default port: if no spot on link data, use closest side
+ 
+     fromLinkable: true, toLinkable: true, cursor: "pointer",
+ 
+     fill: "transparent", // default color
+ 
+     strokeWidth: 5,
+     
+     stroke:"transparent",
+ 
+    },
+ 
+ 
+    new go.Binding("figure"),
+ 
+    new go.Binding("fill")),
+ 
+    $(go.TextBlock,
+ 
+    {
+ 
+     font: "bold 10pt Helvetica, Arial, sans-serif",
+ 
+     margin: 8,
+ 
+     maxSize: new go.Size(2000, NaN),
+ 
+     wrap: go.TextBlock.WrapFit,
+ 
+     editable: true,
+     
+     stroke:"white"
+ 
+    },
+    //text新增的属性
+    new go.Binding("font"),
+    new go.Binding("stroke"),
+    new go.Binding("text").makeTwoWay()
+    )
+ 
+   ),
+ 
+   // four small named ports, one on each side:
+ 
+   makePort("T", go.Spot.Top, false, true),
+ 
+   makePort("L", go.Spot.Left, true, true),
+ 
+   makePort("R", go.Spot.Right, true, true),
+ 
+   makePort("B", go.Spot.Bottom, true, false),
+ 
+   { // handle mouse enter/leave events to show/hide the ports
+ 
+    mouseEnter: function(e, node) { showSmallPorts(node, true); },
+ 
+    mouseLeave: function(e, node) { showSmallPorts(node, false); }
+ 
+   }
+ 
+   );
+ 
+  
+ 
+  function showSmallPorts(node, show) {
+ 
+   node.ports.each(function(port) {
+ 
+   if (port.portId !== "") { // don't change the default port, which is the big shape
+ 
+    port.fill = show ? "rgba(0,0,0,.3)" : null;
+ 
+   }
+ 
+   });
+ 
+  }
+ 
+  
+ 
+  var linkSelectionAdornmentTemplate =
+ 
+   $(go.Adornment, "Link",
+ 
+   $(go.Shape,
+ 
+    // isPanelMain declares that this Shape shares the Link.geometry
+ 
+    { isPanelMain: true, fill: null, stroke: "rgba(254,159,0,1)", strokeWidth: 0 }) // use selection object's strokeWidth
+ 
+   );
+ 
+  
+ 
+  myDiagram.linkTemplate =
+ 
+   $(go.Link, // the whole link panel
+ 
+   { selectable: true, selectionAdornmentTemplate: linkSelectionAdornmentTemplate },
+ 
+   { relinkableFrom: true, relinkableTo: true, reshapable: true },
+ 
+   {
+ 
+    routing: go.Link.AvoidsNodes,
+ 
+    curve: go.Link.JumpOver,
+ 
+    corner: 5,
+ 
+    toShortLength: 4
+ 
+   },
+ 
+   new go.Binding("points").makeTwoWay(),
+ 
+   // $(go.Shape, // the link path shape
+ 
+   //  {  isPanelMain: true, strokeWidth: 3 ,stroke:"rgba(254,159,0,1)"}),
+ 
+   // $(go.Shape,// the arrowhead
+ 
+   //  {toArrow: "Standard",stroke:"rgba(254,159,0,1)"}),
+   { routing: go.Link.Orthogonal, corner: 5, toShortLength: -2, fromShortLength: -2 },
+   $(go.Shape, { strokeWidth: 2, stroke: "rgba(254,159,0,1)" }), 
+          
+ 
+   $(go.Panel, "Auto",
+ 
+    new go.Binding("visible", "isSelected").ofObject(),
+ 
+    $(go.Shape, "RoundedRectangle", // the link shape
+ 
+    { fill: "green", stroke: null }),
+ 
+    $(go.TextBlock,
+ 
+    {
+ 
+     textAlign: "center",
+ 
+     font: "30pt helvetica, arial, sans-serif",
+ 
+     stroke: "green",
+ 
+     margin: 2,
+ 
+     minSize: new go.Size(10, NaN),
+ 
+     editable: true
+ 
+    },
+ 
+    new go.Binding("text").makeTwoWay())
+ 
+   )
+ 
+   );
+ 
+  
+ 
+  load(); // load an initial diagram from some JSON text
+ 
+  
+ 
+  // initialize the Palette that is on the left side of the page
+ 
+  myPalette =
+ 
+   $(go.Palette, "myPalettep", // must name or refer to the p HTML element
+ 
+   {
+ 
+    maxSelectionCount: 1,
+ 
+    nodeTemplateMap: myDiagram.nodeTemplateMap, // share the templates used by myDiagram
+ 
+    linkTemplate: // simplify the link template, just in this Palette
+ 
+    $(go.Link,
+ 
+     { // because the GridLayout.alignment is Location and the nodes have locationSpot == Spot.Center,
+ 
+     // to line up the Link in the same manner we have to pretend the Link has the same location spot
+ 
+     locationSpot: go.Spot.Center,
+ 
+     selectionAdornmentTemplate:
+ 
+      $(go.Adornment, "Link",
+ 
+      { locationSpot: go.Spot.Center },
+ 
+      $(go.Shape,
+ 
+       { isPanelMain: true, fill: null, stroke: "deepskyblue", strokeWidth: 0 }),
+ 
+      $(go.Shape, // the arrowhead
+ 
+       { toArrow: "Standard", stroke: null }
+       )
+ 
+      )
+ 
+     },
+ 
+     {
+ 
+     routing: go.Link.AvoidsNodes,
+ 
+     curve: go.Link.JumpOver,
+ 
+     corner: 5,
+ 
+     toShortLength: 4
+ 
+     },
+ 
+     new go.Binding("points"),
+ 
+     $(go.Shape, // the link path shape
+ 
+     { isPanelMain: true, strokeWidth: 2 }),
+ 
+     $(go.Shape, // the arrowhead
+ 
+     { toArrow: "Standard", stroke: null }),
+
+    ),
+    
+    
+ 
+ 
+ 
+    //上面的选择模块   best 
+    model: new go.GraphLinksModel([ // specify the contents of the Palette
+ 
+    {source: "img/1.svg" ,size:20,height:30,width:30},
+    {source: "img/4.svg" ,size:20,height:25,width:25},
+    {source: "img/5.svg" ,size:20,height:50,width:25},
+    {source: "img/6.svg" ,size:20,height:30,width:30},
+    {source: "img/7.svg" ,size:20,height:50,width:50},
+    {source: "img/8.svg" ,size:20,height:30,width:30},
+    {source: "img/9.svg" ,size:20,height:80,width:80},
+    {source: "img/10.svg" ,size:20,height:40,width:60},
+    {source: "img/11.svg" ,size:20,height:40,width:60},
+    {source: "img/12.svg" ,size:20,height:50,width:70},
+    {source: "img/14.svg" ,size:20,height:25,width:32},
+
+    // {figure:"Line1"},
+ 
+ 
+ 
+    //新增图片
+    {source: "img/g1.svg" ,size:20,height:50,width:70},
+    {source: "img/g2.svg" ,size:20,height:50,width:70},
+    {source: "img/g3.svg" ,size:20,height:25,width:32},
+    {source: "img/g4.svg" ,size:20,height:40,width:60},
+    {source: "img/g5.svg" ,size:20,height:30,width:30},
+    {source: "img/g6.svg" ,size:20,height:80,width:80},
+    {source: "img/g7.svg" ,size:20,height:50,width:50},
+    {source: "img/g8.svg" ,size:20,height:25,width:25},
+    {source: "img/g11.svg" ,size:20,height:30,width:30},
+    {source: "img/g12.svg" ,size:20,height:50,width:25},
+    {source: "img/g13.svg" ,size:20,height:30,width:30},
+ 
+    {text:"text",font: "bold 40pt Helvetica, Arial, sans-serif"},
+    {text:"text",font: "bold 15pt Helvetica, Arial, sans-serif"}
+ 
+ 
+ 
+    ], [
+ 
+ 
+    ])
+ 
+   });
+
+ 
+ 
+ 
+   
+ 
+ 
+   myDiagram.addDiagramListener("ObjectSingleClicked", function(e,obj) {
+ 
+   //  myDiagram.model.addNodeData({ text: "DB", figure: "Database", fill: "lightgray" });
+ 
+ 
+    //点元素获取到该元素    
+    var nodeOrLinkList=myDiagram.selection;
+ 
+    nodeOrLinkList.each(function(nodeOrLink) {
+      console.log(nodeOrLink.data)
+ 
+ 
+ 
+     //更改节点属性值
+     // myDiagram.model.setDataProperty(nodeOrLink.data, 'fill', "#ccc");
+ 
+     // console.log(nodeOrLink.data);
+ 
+ 
+     //修改节点属性 数据
+     // nodeOrLink.data.text = "2333"
+ 
+     // nodeOrLink.data.color = "#000000";
+ 
+     // myDiagram.model.updateTargetBindings(nodeOrLink.data);
+ 
+ 
+ 
+     });
+ 
+     // var nodes=myDiagram.nodes;
+ 
+     // // 遍历输出节点对象
+ 
+     // nodes.each(function (node) {
+ 
+     // console.log(node.__gohashid);
+     //__gohashid  node得唯一标识
+     // myDiagram.select(node);
+ 
+     // });
+ 
+     
+ 
+     
+ 
+     
+ 
+  })
+ 
+ 
+
+   let json ={ "class": "GraphLinksModel",
+   "copiesKey": false,
+   "linkFromPortIdProperty": "fromPort",
+   "linkToPortIdProperty": "toPort",
+   "nodeDataArray": [ 
+ {"source":"img/3.svg", "size":20, "height":25, "width":25, "key":-1, "loc":"-500 -170", "angle":90},
+ {"source":"img/5.svg", "size":20, "height":50, "width":25, "key":-11, "loc":"-320 -20"},
+ {"source":"img/8.svg", "size":20, "height":30, "width":30, "key":-12, "loc":"-320 40"},
+ {"source":"img/6.svg", "size":20, "height":30, "width":30, "key":-13, "loc":"-240 -30"},
+ {"source":"img/9.svg", "size":20, "height":80, "width":80, "key":-14, "loc":"-240 60"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-20, "loc":"-240 -240", "angle":90},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-18, "loc":"-500 -130", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-15, "loc":"-520 40"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-21, "loc":"-520 70"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-22, "loc":"-480 40"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-23, "loc":"-500 40"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-24, "loc":"-240 -120"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-25, "loc":"-220 -120"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-26, "loc":"-260 -120"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-16, "loc":"110 -120", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-17, "loc":"110 -100", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-19, "loc":"110 -140", "angle":90},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-27, "loc":"170 -120"},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-28, "loc":"70 -120"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-29, "loc":"30 -120"},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-30, "loc":"-10 -120", "angle":180},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-31, "loc":"160 50"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-32, "loc":"110 30", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-33, "loc":"110 50", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-34, "loc":"110 70", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-35, "loc":"70 50"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-36, "loc":"30 50"},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-37, "loc":"-10 50", "angle":180},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-38, "loc":"160 -210"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-39, "loc":"110 -230", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-40, "loc":"110 -210", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-41, "loc":"110 -190", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-42, "loc":"70 -210"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-43, "loc":"30 -210"},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-44, "loc":"-10 -210", "angle":180},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-45, "loc":"160 -20"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-46, "loc":"110 -40", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-47, "loc":"110 -20", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-48, "loc":"110 0", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-49, "loc":"70 -20"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-50, "loc":"30 -20"},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-51, "loc":"-10 -20", "angle":180},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-52, "loc":"160 140"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-53, "loc":"110 160", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-54, "loc":"110 140", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-55, "loc":"110 120", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-56, "loc":"70 140"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-57, "loc":"30 140"},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-58, "loc":"-10 140", "angle":180},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-59, "loc":"460 -200"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-60, "loc":"410 -200", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-61, "loc":"410 -220", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-62, "loc":"410 -180", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-63, "loc":"370 -200"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-64, "loc":"330 -200"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-73, "loc":"630 -240", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-74, "loc":"610 -150"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-75, "loc":"650 -150"},
+ {"source":"img/1.svg", "size":"1 1", "height":30, "width":30, "key":-76, "loc":"630 -150"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-65, "loc":"910 150"},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-69, "loc":"820 150"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-70, "loc":"780 150"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-71, "loc":"910 80"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-72, "loc":"860 80", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-77, "loc":"860 60", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-78, "loc":"860 100", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-79, "loc":"820 80"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-80, "loc":"780 80"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-81, "loc":"910 -140"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-82, "loc":"860 -140", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-83, "loc":"860 -160", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-84, "loc":"860 -120", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-85, "loc":"820 -140"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-86, "loc":"780 -140"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-87, "loc":"910 -210"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-88, "loc":"860 -210", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-89, "loc":"860 -230", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-90, "loc":"860 -190", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-91, "loc":"820 -210"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-92, "loc":"780 -210"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-93, "loc":"910 -70"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-94, "loc":"860 -70", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-95, "loc":"860 -90", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-96, "loc":"860 -50", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-97, "loc":"820 -70"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-98, "loc":"780 -70"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-99, "loc":"910 10"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-100, "loc":"860 10", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-101, "loc":"860 -10", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-102, "loc":"860 30", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-103, "loc":"820 10"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-104, "loc":"780 10"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-105, "loc":"910 390"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-106, "loc":"860 390", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-107, "loc":"860 370", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-108, "loc":"860 410", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-109, "loc":"820 390"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-110, "loc":"780 390"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-111, "loc":"910 240"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-112, "loc":"860 240", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-113, "loc":"860 220", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-114, "loc":"860 260", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-115, "loc":"820 240"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-116, "loc":"780 240"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-117, "loc":"910 320"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-118, "loc":"860 320", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-119, "loc":"860 300", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-120, "loc":"860 340", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-121, "loc":"820 320"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-122, "loc":"780 320"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-124, "loc":"1200 -200"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-125, "loc":"1150 -200", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-126, "loc":"1150 -180", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-127, "loc":"1150 -220", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-128, "loc":"1110 -200"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-129, "loc":"1070 -200"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-130, "loc":"1200 -120"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-131, "loc":"1150 -120", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-132, "loc":"1150 -100", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-133, "loc":"1150 -140", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-134, "loc":"1110 -120"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-135, "loc":"1070 -120"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-136, "loc":"1200 -40"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-137, "loc":"1150 -40", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-138, "loc":"1150 -20", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-139, "loc":"1150 -60", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-140, "loc":"1110 -40"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-141, "loc":"1070 -40"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-142, "loc":"1200 30"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-143, "loc":"1150 30", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-144, "loc":"1150 50", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-145, "loc":"1150 10", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-146, "loc":"1110 30"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-147, "loc":"1070 30"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-148, "loc":"1200 110"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-149, "loc":"1150 110", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-150, "loc":"1150 130", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-151, "loc":"1150 90", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-152, "loc":"1110 110"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-153, "loc":"1070 110"},
+ {"source":"img/14.svg", "size":20, "height":25, "width":32, "key":-154, "loc":"1200 190"},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-155, "loc":"1150 190", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-156, "loc":"1150 210", "angle":90},
+ {"source":"img/1.svg", "size":20, "height":30, "width":30, "key":-157, "loc":"1150 170", "angle":90},
+ {"source":"img/4.svg", "size":20, "height":25, "width":25, "key":-158, "loc":"1110 190"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-159, "loc":"1070 190"},
+ {"source":"img/12.svg", "size":20, "height":50, "width":70, "key":-160, "loc":"1070 370"},
+ {"source":"img/7.svg", "size":20, "height":50, "width":50, "key":-161, "loc":"1180 370"},
+ {"text":"电容柜", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-166, "loc":"-310 -170", "size":"48 120"},
+ {"text":"消防栓机械泵2路", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-167, "loc":"-20 -170"},
+ {"text":"一层南1APE2右一层北1APE1左", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-168, "loc":"50 -70", "size":"324 43"},
+ {"text":"生活水泵2路一层弱电房", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-169, "loc":"10 20"},
+ {"text":"消防喷淋机械泵1", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-170, "loc":"-20 100"},
+ {"text":"六层南", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-171, "loc":"760 -180"},
+ {"text":"五层南", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-172, "loc":"760 -100"},
+ {"text":"四层南", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-173, "loc":"760 -30"},
+ {"text":"三层南", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-174, "loc":"760 50"},
+ {"text":"二层南", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-175, "loc":"760 120"},
+ {"text":"一层南", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-176, "loc":"760 270"},
+ {"text":"六层北", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-177, "loc":"1040 -160"},
+ {"text":"五层北", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-178, "loc":"1040 -80"},
+ {"text":"四层北", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-179, "loc":"1040 0"},
+ {"text":"三层北", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-180, "loc":"1040 70"},
+ {"text":"二层北", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-181, "loc":"1040 150"},
+ {"text":"一层北", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-182, "loc":"1040 230"},
+ {"text":"地源热泵空调总表", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-184, "loc":"370 -140"},
+ {"text":"新增分立柜", "font":"bold 15pt Helvetica, Arial, sans-serif", "key":-185, "loc":"580 -120", "size":"57 136"},
+ {"text":"配电图", "font":"bold 40pt Helvetica, Arial, sans-serif", "key":-186, "loc":"290 -380"}
+  ],
+   "linkDataArray": [ 
+ {"from":-1, "fromPort":"L", "toPort":"", "points":[-500,-182.50000000000006,-500,-192.50000000000006,-500,-287.33333587646484,-570,-287.33333587646484,-640,-287.33333587646484,-650,-287.33333587646484]},
+ {"from":-23, "fromPort":"B", "toPort":"", "points":[-500,55,-500,65,-500,230.97143229228942,-420.723347437032,230.97143229228942,-420.723347437032,220.97143229228942,-420.723347437032,230.97143229228942]},
+ {"from":-20, "fromPort":"L", "toPort":"", "points":[-240,-275,-240,-285,-418.59130344664163,-285,-418.59130344664163,-29.171558533334803,-418.59130344664163,226.6568829333304,-418.59130344664163,236.6568829333304]},
+ {"from":-11, "to":-12, "fromPort":"B", "toPort":"T", "points":[-320,5,-320,15,-320,15,-320,15,-320,15,-320,25]},
+ {"from":-24, "to":-13, "fromPort":"B", "toPort":"T", "points":[-240,-105,-240,-95,-240,-75,-240,-75,-240,-55,-240,-45]},
+ {"to":-11, "fromPort":"", "toPort":"T", "points":[-240.04008213443706,-72.03248997671122,-250.04008213443706,-72.03248997671122,-320,-72.03248997671122,-320,-63.51624498835561,-320,-55,-320,-45]},
+ {"from":-13, "to":-14, "fromPort":"B", "toPort":"T", "points":[-240,-15,-240,-5,-240,2.499999999999993,-240,2.499999999999993,-240,9.999999999999986,-240,19.999999999999986]},
+ {"from":-20, "to":-24, "fromPort":"R", "toPort":"T", "points":[-240,-205,-240,-195,-240,-170,-240,-170,-240,-145,-240,-135]},
+ {"from":-18, "to":-23, "fromPort":"R", "toPort":"T", "points":[-500,-95,-500,-85,-500,-35,-500,-35,-500,15,-500,25]},
+ {"from":-27, "to":-16, "fromPort":"L", "toPort":"T", "points":[154,-120,144,-120,139.5,-120,139.5,-120,135,-120,125,-120]},
+ {"from":-16, "to":-28, "fromPort":"B", "toPort":"R", "points":[95,-120,85,-120,85,-120,92.5,-120,92.5,-120,82.5,-120]},
+ {"from":-31, "to":-33, "fromPort":"L", "toPort":"T", "points":[144,50,134,50,134,50,135,50,135,50,125,50]},
+ {"from":-33, "to":-35, "fromPort":"B", "toPort":"R", "points":[95,50,85,50,85,50,92.5,50,92.5,50,82.5,50]},
+ {"from":-38, "to":-40, "fromPort":"L", "toPort":"T", "points":[144,-210,134,-210,134,-210,135,-210,135,-210,125,-210]},
+ {"from":-40, "to":-42, "fromPort":"B", "toPort":"R", "points":[95,-210,85,-210,77.836526633299,-210,77.836526633299,-210,92.5,-210,82.5,-210]},
+ {"from":-45, "to":-47, "fromPort":"L", "toPort":"T", "points":[144,-20,134,-20,134,-20,135,-20,135,-20,125,-20]},
+ {"from":-47, "to":-49, "fromPort":"B", "toPort":"R", "points":[95,-20,85,-20,85,-20,92.5,-20,92.5,-20,82.5,-20]},
+ {"from":-52, "to":-54, "fromPort":"L", "toPort":"T", "points":[144,140,134,140,134,140,135,140,135,140,125,140]},
+ {"from":-54, "to":-56, "fromPort":"B", "toPort":"R", "points":[95,140,85,140,85,140,92.5,140,92.5,140,82.5,140]},
+ {"from":-44, "to":-20, "fromPort":"R", "toPort":"L", "points":[-22.5,-210,-32.5,-210,-119.75,-210,-119.75,-285,-240,-285,-240,-275]},
+ {"from":-30, "to":-20, "fromPort":"R", "toPort":"L", "points":[-22.5,-120,-32.5,-120,-119.75,-120,-119.75,-285,-240,-285,-240,-275]},
+ {"from":-51, "to":-20, "fromPort":"R", "toPort":"L", "points":[-22.5,-20,-32.5,-20,-119.75,-20,-119.75,-285,-240,-285,-240,-275]},
+ {"from":-37, "to":-20, "fromPort":"R", "toPort":"L", "points":[-22.5,50,-32.5,50,-119.75,50,-119.75,-285,-240,-285,-240,-275]},
+ {"from":-58, "to":-20, "fromPort":"R", "toPort":"L", "points":[-22.5,140,-32.5,140,-119.75,140,-119.75,-285,-240,-285,-240,-275]},
+ {"from":-59, "to":-60, "fromPort":"L", "toPort":"T", "points":[444,-200,434,-200,434,-200,435,-200,435,-200,425,-200]},
+ {"from":-60, "to":-63, "fromPort":"B", "toPort":"R", "points":[395,-200,385,-200,385,-200,392.5,-200,392.5,-200,382.5,-200]},
+ {"from":-64, "to":-20, "fromPort":"L", "toPort":"L", "points":[295,-200,285,-200,284,-200,284,-284,-240,-284,-240,-285,-240,-275]},
+ {"from":-73, "to":-76, "fromPort":"R", "toPort":"T", "points":[630,-205,630,-195,630,-185,630,-185,630,-175,630,-165]},
+ {"from":-73, "to":-20, "fromPort":"L", "toPort":"L", "points":[630,-275,630,-285,-240,-285,-240,-285,-240,-285,-240,-275]},
+ {"from":-71, "to":-72, "fromPort":"L", "toPort":"T", "points":[894,80,884,80,884,80,885,80,885,80,875,80]},
+ {"from":-72, "to":-79, "fromPort":"B", "toPort":"R", "points":[845,80,835,80,835,80,842.5,80,842.5,80,832.5,80]},
+ {"from":-81, "to":-82, "fromPort":"L", "toPort":"T", "points":[894,-140,884,-140,884,-140,885,-140,885,-140,875,-140]},
+ {"from":-82, "to":-85, "fromPort":"B", "toPort":"R", "points":[845,-140,835,-140,835,-140,842.5,-140,842.5,-140,832.5,-140]},
+ {"from":-87, "to":-88, "fromPort":"L", "toPort":"T", "points":[894,-210,884,-210,884,-210,885,-210,885,-210,875,-210]},
+ {"from":-88, "to":-91, "fromPort":"B", "toPort":"R", "points":[845,-210,835,-210,835,-210,842.5,-210,842.5,-210,832.5,-210]},
+ {"from":-93, "to":-94, "fromPort":"L", "toPort":"T", "points":[894,-70,884,-70,884,-70,885,-70,885,-70,875,-70]},
+ {"from":-94, "to":-97, "fromPort":"B", "toPort":"R", "points":[845,-70,835,-70,835,-70,842.5,-70,842.5,-70,832.5,-70]},
+ {"from":-99, "to":-100, "fromPort":"L", "toPort":"T", "points":[894,10,884,10,884,10,885,10,885,10,875,10]},
+ {"from":-100, "to":-103, "fromPort":"B", "toPort":"R", "points":[845,10,835,10,835,10,842.5,10,842.5,10,832.5,10]},
+ {"from":-76, "to":-92, "fromPort":"B", "toPort":"L", "points":[630,-135,630,-125,694,-125,694,-210,735,-210,745,-210]},
+ {"from":-76, "to":-86, "fromPort":"B", "toPort":"L", "points":[630,-135,630,-125,694,-125,694,-140,735,-140,745,-140]},
+ {"from":-76, "to":-98, "fromPort":"B", "toPort":"L", "points":[630,-135,630,-125,630,-70,682.5,-70,735,-70,745,-70]},
+ {"from":-76, "to":-104, "fromPort":"B", "toPort":"L", "points":[630,-135,630,-125,630,10,682.5,10,735,10,745,10]},
+ {"from":-76, "to":-80, "fromPort":"B", "toPort":"L", "points":[630,-135,630,-125,630,80,682.5,80,735,80,745,80]},
+ {"from":-76, "to":-70, "fromPort":"B", "toPort":"L", "points":[630,-135,630,-125,630,150,682.5,150,735,150,745,150]},
+ {"from":-105, "to":-106, "fromPort":"L", "toPort":"T", "points":[894,390,884,390,884,390,885,390,885,390,875,390]},
+ {"from":-106, "to":-109, "fromPort":"B", "toPort":"R", "points":[845,390,835,390,835,390,842.5,390,842.5,390,832.5,390]},
+ {"from":-111, "to":-112, "fromPort":"L", "toPort":"T", "points":[894,240,884,240,884,240,885,240,885,240,875,240]},
+ {"from":-112, "to":-115, "fromPort":"B", "toPort":"R", "points":[845,240,835,240,835,240,842.5,240,842.5,240,832.5,240]},
+ {"from":-117, "to":-118, "fromPort":"L", "toPort":"T", "points":[894,320,884,320,884,320,885,320,885,320,875,320]},
+ {"from":-118, "to":-121, "fromPort":"B", "toPort":"R", "points":[845,320,835,320,835,320,842.5,320,842.5,320,832.5,320]},
+ {"from":-112, "to":-115, "fromPort":"B", "toPort":"", "points":[845,240,835,240,833.5,240,833.5,241,832,241,822,241]},
+ {"from":-76, "to":-116, "fromPort":"B", "toPort":"L", "points":[630,-135,630,-125,630,240,682.5,240,735,240,745,240]},
+ {"from":-76, "to":-122, "fromPort":"B", "toPort":"L", "points":[630,-135,630,-125,630,320,682.5,320,735,320,745,320]},
+ {"from":-76, "to":-110, "fromPort":"B", "toPort":"L", "points":[630,-135,630,-125,630,390,735,390,735,390,745,390]},
+ {"from":-124, "to":-125, "fromPort":"L", "toPort":"T", "points":[1184,-200,1174,-200,1174,-200,1175,-200,1175,-200,1165,-200]},
+ {"from":-125, "to":-128, "fromPort":"B", "toPort":"R", "points":[1135,-200,1125,-200,1125,-200,1132.5,-200,1132.5,-200,1122.5,-200]},
+ {"from":-130, "to":-131, "fromPort":"L", "toPort":"T", "points":[1184,-120,1174,-120,1174,-120,1175,-120,1175,-120,1165,-120]},
+ {"from":-131, "to":-134, "fromPort":"B", "toPort":"R", "points":[1135,-120,1125,-120,1125,-120,1132.5,-120,1132.5,-120,1122.5,-120]},
+ {"from":-136, "to":-137, "fromPort":"L", "toPort":"T", "points":[1184,-40,1174,-40,1174,-40,1175,-40,1175,-40,1165,-40]},
+ {"from":-137, "to":-140, "fromPort":"B", "toPort":"R", "points":[1135,-40,1125,-40,1125,-40,1132.5,-40,1132.5,-40,1122.5,-40]},
+ {"from":-142, "to":-143, "fromPort":"L", "toPort":"T", "points":[1184,30,1174,30,1174,30,1175,30,1175,30,1165,30]},
+ {"from":-143, "to":-146, "fromPort":"B", "toPort":"R", "points":[1135,30,1125,30,1125,30,1132.5,30,1132.5,30,1122.5,30]},
+ {"from":-148, "to":-149, "fromPort":"L", "toPort":"T", "points":[1184,110,1174,110,1174,110,1175,110,1175,110,1165,110]},
+ {"from":-149, "to":-152, "fromPort":"B", "toPort":"R", "points":[1135,110,1125,110,1125,110,1132.5,110,1132.5,110,1122.5,110]},
+ {"from":-154, "to":-155, "fromPort":"L", "toPort":"T", "points":[1184,190,1174,190,1174,190,1175,190,1175,190,1165,190]},
+ {"from":-155, "to":-158, "fromPort":"B", "toPort":"R", "points":[1135,190,1125,190,1125,190,1132.5,190,1132.5,190,1122.5,190]},
+ {"from":-73, "to":-129, "fromPort":"L", "toPort":"L", "points":[630,-275,630,-285,630,-285,940,-285,940,-200,1025,-200,1035,-200]},
+ {"from":-73, "to":-135, "fromPort":"L", "toPort":"L", "points":[630,-275,630,-285,630,-285,884,-285,884,-120,1025,-120,1035,-120]},
+ {"from":-73, "to":-141, "fromPort":"L", "toPort":"L", "points":[630,-275,630,-285,630,-285,884,-285,884,-40,1025,-40,1035,-40]},
+ {"from":-73, "to":-147, "fromPort":"L", "toPort":"L", "points":[630,-275,630,-285,630,-285,940,-285,940,30,1025,30,1035,30]},
+ {"from":-73, "to":-153, "fromPort":"L", "toPort":"L", "points":[630,-275,630,-285,630,-285,884,-285,884,110,1025,110,1035,110]},
+ {"from":-73, "to":-159, "fromPort":"L", "toPort":"L", "points":[630,-275,630,-285,630,-285,676,-285,676,190,1025,190,1035,190]},
+ {"from":-160, "to":-161, "fromPort":"R", "toPort":"L", "points":[1105,370,1115,370,1130,370,1130,370,1145,370,1155,370]},
+ {"from":-69, "to":-65, "fromPort":"R", "toPort":"L", "points":[832.5,150,842.5,150,863.25,150,863.25,150,884,150,894,150]},
+ {"from":-69, "to":-160, "fromPort":"R", "toPort":"", "points":[832.5,150,842.5,150,844,150,844,172,940,172,940,371,1060,371,1070,371]},
+ {"from":-42, "fromPort":"R", "toPort":"", "points":[82.5,-210,92.5,-210,92.5,-210.24852079546085,76.63543833967196,-210.24852079546085,76.63543833967196,-210.4970415909217,86.63543833967196,-210.4970415909217]},
+ {"from":-28, "fromPort":"R", "toPort":"", "points":[82.5,-120,92.5,-120,92.5,-120.23870322055316,77.98911706372928,-120.23870322055316,77.98911706372928,-120.47740644110633,87.98911706372928,-120.47740644110633]},
+ {"from":-35, "fromPort":"R", "toPort":"", "points":[82.5,50,92.5,50,92.5,49.704636714047055,76.63543833967196,49.704636714047055,76.63543833967196,49.40927342809411,86.63543833967196,49.40927342809411]},
+ {"to":-33, "fromPort":"", "toPort":"T", "points":[132.66051495762264,49.40927342809411,122.66051495762264,49.40927342809411,122.66051495762264,49.704636714047055,135,49.704636714047055,135,50,125,50]},
+ {"to":-47, "fromPort":"", "toPort":"T", "points":[135.3678724057374,-19.628341498831958,125.36787240573739,-19.628341498831958,125.36787240573739,-19.81417074941598,135,-19.81417074941598,135,-20,125,-20]},
+ {"to":-16, "fromPort":"", "toPort":"T", "points":[132.66051495762264,-119.80056707907764,122.66051495762264,-119.80056707907764,122.66051495762264,-119.90028353953882,135,-119.90028353953882,135,-120,125,-120]},
+ {"to":-40, "fromPort":"", "toPort":"T", "points":[133.3373543196513,-209.14336286686432,123.3373543196513,-209.14336286686432,123.3373543196513,-209.57168143343216,135,-209.57168143343216,135,-210,125,-210]},
+ {"from":-49, "fromPort":"R", "toPort":"", "points":[82.5,-20,92.5,-20,92.5,-20.265396560445538,77.31227770170062,-20.265396560445538,77.31227770170062,-20.530793120891076,87.31227770170062,-20.530793120891076]},
+ {"from":-56, "fromPort":"R", "toPort":"", "points":[82.5,140,92.5,140,92.5,139.71445428895476,77.98911706372928,139.71445428895476,77.98911706372928,139.42890857790948,87.98911706372928,139.42890857790948]},
+ {"to":-54, "fromPort":"", "toPort":"T", "points":[134.01419368168,141.00820730780913,124.01419368168001,141.00820730780913,124.01419368168001,140.50410365390456,135,140.50410365390456,135,140,125,140]},
+ {"from":-58, "fromPort":"R", "toPort":"", "points":[-22.5,140,-32.5,140,-32.5,139.48884461086155,-16.3967351191188,139.48884461086155,-16.3967351191188,138.9776892217231,-26.3967351191188,138.9776892217231]},
+ {"from":-37, "to":-36, "fromPort":"R", "toPort":"L", "points":[-22.5,50,-32.5,50,-32.5,50,-23.75,50,-15,50,-5,50]},
+ {"from":-51, "fromPort":"R", "toPort":"", "points":[-22.5,-20,-32.5,-20,-32.5,-20.716619789537873,-16.3967351191188,-20.716619789537873,-16.3967351191188,-21.433239579075746,-26.3967351191188,-21.433239579075746]},
+ {"from":-30, "fromPort":"R", "toPort":"", "points":[-22.5,-120,-32.5,-120,-32.5,-120.01308966955406,-15.043056395061427,-120.01308966955406,-15.043056395061427,-120.02617933910813,-25.043056395061427,-120.02617933910813]},
+ {"from":-44, "fromPort":"R", "toPort":"", "points":[-22.5,-210,-32.5,-210,-32.5,-210.92536015748954,-15.719895757090143,-210.92536015748954,-15.719895757090143,-211.85072031497907,-25.719895757090143,-211.85072031497907]},
+ {"from":-63, "fromPort":"R", "toPort":"", "points":[382.5,-200,392.5,-200,392.5,-200.51064526126004,377.82895444243763,-200.51064526126004,377.82895444243763,-201.02129052252008,387.82895444243763,-201.02129052252008]},
+ {"to":-60, "fromPort":"", "toPort":"T", "points":[432.500352336331,-201.02129052252008,422.500352336331,-201.02129052252008,422.500352336331,-200.51064526126004,435,-200.51064526126004,435,-200,425,-200]},
+ {"to":-76, "fromPort":"", "toPort":"T", "points":[629.460606686679,-173.94771604137262,629.460606686679,-163.94771604137262,629.7303033433395,-163.94771604137262,629.7303033433395,-175,630,-175,630,-165]},
+ {"fromPort":"R", "toPort":"", "points":[819.7157573253302,391.1651287394051,829.7157573253302,391.1651287394051,829.7157573253302,390.6436456474805,813.1123694307588,390.6436456474805,813.1123694307588,390.122162555556,823.1123694307588,390.122162555556]},
+ {"to":-106, "fromPort":"", "toPort":"T", "points":[883.9522068094655,389.63387317817956,873.9522068094655,389.63387317817956,873.9522068094655,389.8169365890898,885,389.8169365890898,885,390,875,390]},
+ {"to":-118, "fromPort":"", "toPort":"T", "points":[883.9522068094655,320.5962582512535,873.9522068094655,320.5962582512535,873.9522068094655,320.29812912562676,885,320.29812912562676,885,320,875,320]},
+ {"fromPort":"R", "toPort":"", "points":[818.0443594314363,320.17766704838107,828.0443594314363,320.17766704838107,828.0443594314363,319.7989568119791,813.4714896229509,319.7989568119791,813.4714896229509,319.42024657557715,823.4714896229509,319.42024657557715]},
+ {"from":-121, "fromPort":"R", "toPort":"", "points":[832.5,320,842.5,320,842.5,320.29812912562676,827.250290829486,320.29812912562676,827.250290829486,320.5962582512535,837.250290829486,320.5962582512535]},
+ {"from":-109, "fromPort":"R", "toPort":"", "points":[832.5,390,842.5,390,842.5,390.1553562701041,826.5734514674573,390.1553562701041,826.5734514674573,390.3107125402082,836.5734514674573,390.3107125402082]},
+ {"to":-24, "fromPort":"", "toPort":"T", "points":[-240.21028958398108,-150.19065353048762,-240.21028958398108,-140.19065353048762,-240.10514479199054,-140.19065353048762,-240.10514479199054,-145,-240,-145,-240,-135]},
+ {"to":-24, "fromPort":"", "toPort":"T", "points":[-239.49960825385094,-144.50520288944665,-239.49960825385094,-134.50520288944665,-239.74980412692548,-134.50520288944665,-239.74980412692548,-145,-240,-145,-240,-135]},
+ {"from":-1, "fromPort":"L", "toPort":"", "points":[-500,-182.5,-500,-192.5,-500.047,-192.5,-500.047,-190.65499852800374,-500.0940000000001,-190.65499852800374,-500.0940000000001,-200.65499852800374]}
+  ]}
+
+ 
+ 
+ 
+//  //每次刷新读取json
+//  if(window.localStorage.model){
+
+//    myDiagram.model = go.Model.fromJson(window.localStorage.model);
+//  }
+let objjson = { "class": "go.GraphLinksModel",
+
+"linkFromPortIdProperty": "fromPort",
+
+"linkToPortIdProperty": "toPort",
+
+"nodeDataArray": [
+   
+],
+
+"linkDataArray": [
+
+]}
+myDiagram.model = go.Model.fromJson(json);
+ 
+ 
+ document.getElementById("click1").onclick=function(){
+  myDiagram.model = go.Model.fromJson(json);
+ }
+ document.getElementById("click2").onclick=function(){
+  myDiagram.model = go.Model.fromJson(objjson);
+ }
+ 
+//  //每隔20s保存一次json  草稿箱
+//  setInterval(() => {
+//    window.localStorage.model = myDiagram.model.toJson()
+//  }, 2000);
+ 
+ 
+ 
+  }
+ 
+ 
+  
+ 
+  function TopRotatingTool() {
+ 
+  go.RotatingTool.call(this);
+ 
+  }
+ 
+  go.Diagram.inherit(TopRotatingTool, go.RotatingTool);
+ 
+  
+ 
+  /** @override */
+ 
+  TopRotatingTool.prototype.updateAdornments = function(part) {
+ 
+  go.RotatingTool.prototype.updateAdornments.call(this, part);
+ 
+  var adornment = part.findAdornment("Rotating");
+ 
+  if (adornment !== null) {
+ 
+   adornment.location = part.rotateObject.getDocumentPoint(new go.Spot(0.5, 0, 0, -30)); // above middle top
+ 
+  }
+ 
+  };
+ 
+  
+ 
+  /** @override */
+ 
+  TopRotatingTool.prototype.rotate = function(newangle) {
+ 
+  go.RotatingTool.prototype.rotate.call(this, newangle + 90);
+ 
+  };
+ 
+  // end of TopRotatingTool class
+ 
+  
+ 
+  
+ 
+  // Show the diagram's model in JSON format that the user may edit
+ 
+  function save() {
+ 
+  saveDiagramProperties(); // do this first, before writing to JSON
+ 
+  document.getElementById("mySavedModel").value = myDiagram.model.toJson();
+ 
+  myDiagram.isModified = false;
+ 
+  }
+ 
+  function load() {
+ 
+  myDiagram.model = go.Model.fromJson(document.getElementById("mySavedModel").value);
+ 
+  loadDiagramProperties(); // do this after the Model.modelData has been brought into memory
+ 
+  }
+ 
+  
+ 
+  function saveDiagramProperties() {
+ 
+  myDiagram.model.modelData.position = go.Point.stringify(myDiagram.position);
+ 
+  }
+ 
+  function loadDiagramProperties(e) {
+ 
+  // set Diagram.initialPosition, not Diagram.position, to handle initialization side-effects
+ 
+  var pos = myDiagram.model.modelData.position;
+ 
+  if (pos) myDiagram.initialPosition = go.Point.parse(pos);
+ 
+  }
+ 
+  //
+   function findHeadShot() {
+     return "img/aa.png"
+       }
+ 
+ 
+  
+ 
+ 
+ 
+ 
+ 
+ 
+  
+ 
+ </script>
+</html>
